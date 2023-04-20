@@ -17,13 +17,16 @@ package com.jagrosh.jmusicbot.commands.dj;
 
 import com.jagrosh.jdautilities.command.CommandEvent;
 import com.jagrosh.jdautilities.commons.utils.FinderUtil;
+import com.jagrosh.jdautilities.menu.OrderedMenu;
 import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.audio.AudioHandler;
 import com.jagrosh.jmusicbot.commands.DJCommand;
 import net.dv8tion.jda.api.Permission;
+import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.User;
 
-import java.util.regex.Matcher;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  *
@@ -60,52 +63,45 @@ public class ForceRemoveCmd extends DJCommand
         }
 
 
-        User target = findUser(event.getArgs());
+        User target;
+        List<Member> found = FinderUtil.findMembers(event.getArgs(), event.getGuild());
 
-        if (target == null)
+        if(found.isEmpty())
         {
             event.replyError("Unable to find the user!");
             return;
         }
+        else if(found.size()>1)
+        {
+            OrderedMenu.Builder builder = new OrderedMenu.Builder();
+            for(int i=0; i<found.size() && i<4; i++)
+            {
+                Member member = found.get(i);
+                builder.addChoice("**"+member.getUser().getName()+"**#"+member.getUser().getDiscriminator());
+            }
+
+            builder
+            .setSelection((msg, i) -> removeAllEntries(found.get(i-1).getUser(), event))
+            .setText("Found multiple users:")
+            .setColor(event.getSelfMember().getColor())
+            .useNumbers()
+            .setUsers(event.getAuthor())
+            .useCancelButton(true)
+            .setCancel((msg) -> {})
+            .setEventWaiter(bot.getWaiter())
+            .setTimeout(1, TimeUnit.MINUTES)
+
+            .build().display(event.getChannel());
+
+            return;
+        }
+        else
+        {
+            target = found.get(0).getUser();
+        }
 
         removeAllEntries(target, event);
 
-    }
-
-    private User findUser(String query)
-    {
-        Matcher userMention = FinderUtil.USER_MENTION.matcher(query);
-        Matcher fullRefMatch = FinderUtil.FULL_USER_REF.matcher(query);
-        Matcher discordIdMatch = FinderUtil.DISCORD_ID.matcher(query);
-        if(userMention.matches() || discordIdMatch.matches())
-        {
-            String stringId;
-            if (userMention.matches()) 
-            {
-                stringId = query.replaceAll("[^0-9]", "");
-            }
-            else 
-            {
-                stringId = query;
-            }
-            long userId;
-            try 
-            {
-                userId = Long.parseLong(stringId);
-            } 
-            catch (NumberFormatException e) 
-            {
-                return null;
-            }
-            return bot.getJDA().retrieveUserById(userId).complete();
-        }
-        else if(fullRefMatch.matches())
-        {
-            String username = fullRefMatch.group(1).toLowerCase() + "#" + fullRefMatch.group(2);
-        
-            return bot.getJDA().getUserByTag(username);
-        }
-        return null;
     }
 
     private void removeAllEntries(User target, CommandEvent event)
